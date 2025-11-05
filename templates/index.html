@@ -50,18 +50,21 @@
                     </button>
                 </div>
                 <p class="section-description">Define the input fields that will be available in the testing panel. These fields will create global variables for use in your functions.</p>
-                <div v-for="(field, index) in fields" :key="index" class="field-row">
-                    <input v-model="field.name" class="input" placeholder="Field Name" />
-                    <div class="select">
-                        <select v-model="field.type">
-                            <option value="text">Text</option>
-                            <option value="number">Number</option>
-                            <option value="email">Email</option>
-                        </select>
+                <div v-for="(field, index) in fields" :key="index" class="sub-box">
+                    <div class="field-row">
+                        <input v-model="field.name" class="input" :class="{ 'is-danger': getFieldValidationError(field.name, index) }" placeholder="Field Name" @input="validateFieldName(field, index)" />
+                        <div class="select">
+                            <select v-model="field.type">
+                                <option value="text">Text</option>
+                                <option value="number">Number</option>
+                                <option value="email">Email</option>
+                            </select>
+                        </div>
+                        <button @click="removeField(index)" class="button is-danger is-small">
+                            <span class="icon"><i class="material-icons">delete</i></span>
+                        </button>
                     </div>
-                    <button @click="removeField(index)" class="button is-danger is-small">
-                        <span class="icon"><i class="material-icons">delete</i></span>
-                    </button>
+                    <p v-if="getFieldValidationError(field.name, index)" class="help is-danger">{{ getFieldValidationError(field.name, index) }}</p>
                 </div>
             </div>
 
@@ -83,12 +86,35 @@
                     </button>
                 </div>
                 <p class="section-description">Write JavaScript functions that will make API calls. Use the available variables from your form fields in your function code.</p>
-                <div v-for="(func, index) in functions" :key="index" class="function-row">
-                    <input v-model="func.name" class="input" placeholder="Function Name" />
-                    <textarea v-model="func.code" class="textarea" placeholder="Function Code (use global variables from fields)"></textarea>
-                    <button @click="removeFunction(index)" class="button is-danger is-small">
-                        <span class="icon"><i class="material-icons">delete</i></span>
-                    </button>
+                <div v-for="(func, index) in functions" :key="index" class="function-row columns">
+                    <div class="column is-2">
+                        <div class="field">
+                            <div class="control">
+                                <input v-model="func.name" class="input" placeholder="Function Name" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-5">
+                        <div class="field">
+                            <div class="control">
+                                <div class="box">
+                                    <span v-html="func.highlightedCode"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-4">
+                        <div class="field">
+                            <div class="control">
+                                <textarea v-model="func.code" class="textarea" placeholder="Function Code (use global variables from fields and APICaller for API calls)" rows="5" @input="highlightCode($event, index)"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-1">
+                        <button @click="removeFunction(index)" class="button is-danger is-small">
+                            <span class="icon"><i class="material-icons">delete</i></span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -123,28 +149,118 @@
             </div>
 
             <div class="box">
-                <h3 class="title is-5">Test Results</h3>
-                <div v-if="testResults.length === 0" class="content">
-                    <p>No tests run yet. Configure your staging panel and run tests.</p>
+                <h3 class="title is-5">API Call Log</h3>
+                <p class="section-description">Real-time log of all API calls made during testing, showing requests and responses.</p>
+                <div v-if="apiCalls.length === 0" class="content">
+                    <p>No API calls made yet. Configure your staging panel and run tests to see API call logs here.</p>
                 </div>
                 <div v-else>
-                    <div v-for="(result, index) in testResults" :key="index" class="box" :class="result.success ? 'has-background-success-light' : 'has-background-danger-light'">
-                        <h4 class="title is-6">{{ result.method }} {{ result.path }}</h4>
-                        <pre>{{ result.response }}</pre>
+                    <div v-for="(call, index) in apiCalls" :key="index" class="box api-call-log" :class="call.type === 'request' ? 'has-background-info-light' : (call.success ? 'has-background-success-light' : 'has-background-danger-light')">
+                        <div class="api-call-header">
+                            <h4 class="title is-6">
+                                <span class="tag" :class="call.type === 'request' ? 'is-info' : (call.success ? 'is-success' : 'is-danger')">
+                                    {{ call.type === 'request' ? 'REQUEST' : 'RESPONSE' }}
+                                </span>
+                                {{ call.method }} {{ call.path }}
+                            </h4>
+                            <small class="timestamp">{{ new Date(call.timestamp).toLocaleTimeString() }}</small>
+                        </div>
+                        <pre class="api-call-details">{{ call.details }}</pre>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </section>
+
+<!-- Toast notifications using Bulma Notification -->
+<div v-for="toast in toasts" :key="toast.id" v-show="toast.show" class="notification toast-notification" :class="`is-${toast.type}`">
+    <button class="delete" @click="removeToast(toast.id)"></button>
+    {{ toast.message }}
+</div>
 {% endraw %}
 {% endblock %}
 
 {% block scripts %}
 <script>
+// APICaller proxy wrapper for axios with tracking
+window.APICaller = new Proxy(axios, {
+    get(target, prop) {
+        if (typeof target[prop] === 'function') {
+            return function(...args) {
+                const method = prop.toUpperCase();
+                const config = args[0];
+
+                // Track request
+                const requestInfo = {
+                    method: method,
+                    url: config.url || (typeof config === 'string' ? config : ''),
+                    headers: config.headers || {},
+                    data: config.data || null,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Add to Vue app's test results if available
+                if (window.vueApp && window.vueApp.addApiCall) {
+                    window.vueApp.addApiCall({
+                        type: 'request',
+                        method: requestInfo.method,
+                        path: requestInfo.url,
+                        details: JSON.stringify({
+                            headers: requestInfo.headers,
+                            data: requestInfo.data
+                        }, null, 2),
+                        timestamp: requestInfo.timestamp
+                    });
+                }
+
+                // Call original axios method
+                const promise = target[prop].apply(target, args);
+
+                // Track response
+                promise.then(response => {
+                    if (window.vueApp && window.vueApp.addApiCall) {
+                        window.vueApp.addApiCall({
+                            type: 'response',
+                            method: requestInfo.method,
+                            path: requestInfo.url,
+                            details: JSON.stringify({
+                                status: response.status,
+                                statusText: response.statusText,
+                                headers: response.headers,
+                                data: response.data
+                            }, null, 2),
+                            timestamp: new Date().toISOString(),
+                            success: true
+                        });
+                    }
+                }).catch(error => {
+                    if (window.vueApp && window.vueApp.addApiCall) {
+                        window.vueApp.addApiCall({
+                            type: 'response',
+                            method: requestInfo.method,
+                            path: requestInfo.url,
+                            details: JSON.stringify({
+                                status: error.response?.status || 'Network Error',
+                                statusText: error.response?.statusText || error.message,
+                                data: error.response?.data || null
+                            }, null, 2),
+                            timestamp: new Date().toISOString(),
+                            success: false
+                        });
+                    }
+                });
+
+                return promise;
+            };
+        }
+        return target[prop];
+    }
+});
+
 const { createApp } = Vue;
 
-createApp({
+const app = createApp({
     data() {
         return {
             activeTab: 'staging',
@@ -152,6 +268,8 @@ createApp({
             functions: [],
             sequence: [],
             testResults: [],
+            apiCalls: [],
+            toasts: [],
             pillColors: [
                 '#007bff', // Blue
                 '#28a745', // Green
@@ -180,8 +298,52 @@ createApp({
         removeField(index) {
             this.fields.splice(index, 1);
         },
+        validateFieldName(field, index) {
+            const name = field.name.trim();
+            if (!name) return;
+
+            // Check for empty name
+            if (!name) {
+                return 'Field name cannot be empty';
+            }
+
+            // Check JavaScript variable naming rules
+            if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
+                return 'Invalid variable name. Must start with letter, $, or _ and contain only letters, numbers, $, or _';
+            }
+
+            // Check for JavaScript reserved words
+            const reservedWords = [
+                'abstract', 'arguments', 'await', 'boolean', 'break', 'byte', 'case', 'catch',
+                'char', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do',
+                'double', 'else', 'enum', 'eval', 'export', 'extends', 'false', 'final',
+                'finally', 'float', 'for', 'function', 'goto', 'if', 'implements', 'import',
+                'in', 'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new',
+                'null', 'package', 'private', 'protected', 'public', 'return', 'short',
+                'static', 'super', 'switch', 'synchronized', 'this', 'throw', 'throws',
+                'transient', 'true', 'try', 'typeof', 'var', 'void', 'volatile', 'while',
+                'with', 'yield'
+            ];
+
+            if (reservedWords.includes(name)) {
+                return `"${name}" is a JavaScript reserved word`;
+            }
+
+            // Check for duplicates
+            const duplicateIndex = this.fields.findIndex((f, i) => i !== index && f.name.trim() === name);
+            if (duplicateIndex !== -1) {
+                return 'Duplicate field name';
+            }
+
+            return null;
+        },
+        getFieldValidationError(name, index) {
+            const field = this.fields[index];
+            if (!field) return null;
+            return this.validateFieldName(field, index);
+        },
         addFunction() {
-            this.functions.push({ name: '', code: '' });
+            this.functions.push({ name: '', code: '', highlightedCode: '' });
         },
         removeFunction(index) {
             this.functions.splice(index, 1);
@@ -192,14 +354,35 @@ createApp({
         removeStep(index) {
             this.sequence.splice(index, 1);
         },
+        showToast(message, type = 'success') {
+            const toast = {
+                id: Date.now(),
+                message,
+                type,
+                show: true
+            };
+            this.toasts.push(toast);
+
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                this.removeToast(toast.id);
+            }, 3000);
+        },
         saveConfig() {
+            // Check for validation errors before saving
+            const hasErrors = this.fields.some((field, index) => this.validateFieldName(field, index));
+            if (hasErrors) {
+                this.showToast('Please fix field name validation errors before saving', 'danger');
+                return;
+            }
+
             const config = {
                 fields: this.fields,
                 functions: this.functions,
                 sequence: this.sequence
             };
             localStorage.setItem('csrfConfig', JSON.stringify(config));
-            alert('Configuration saved!');
+            this.showToast('Configuration saved successfully!', 'success');
         },
         loadConfig() {
             const config = localStorage.getItem('csrfConfig');
@@ -210,14 +393,77 @@ createApp({
                 this.sequence = parsed.sequence || [];
             }
         },
+        addApiCall(apiCall) {
+            this.apiCalls.push(apiCall);
+        },
+        removeToast(id) {
+            const index = this.toasts.findIndex(t => t.id === id);
+            if (index > -1) {
+                this.toasts[index].show = false;
+                // Remove from array after animation
+                setTimeout(() => {
+                    this.toasts.splice(index, 1);
+                }, 300);
+            }
+        },
+        highlightCode(event, index) {
+            const code = event.target.value;
+            // Use highlight.js to highlight the code
+            if (window.hljs) {
+                const highlighted = window.hljs.highlight(code, { language: 'javascript' });
+                this.functions[index].highlightedCode = highlighted.value;
+            }
+        },
         runTests() {
-            // Placeholder for test execution
-            this.testResults = [
-                { method: 'POST', path: '/api/test', response: 'Test response 1', success: true },
-                { method: 'GET', path: '/api/data', response: 'Test response 2', success: false }
-            ];
+            // Clear previous results
+            this.apiCalls = [];
+
+            if (this.sequence.length === 0) {
+                this.showToast('No functions in sequence to execute', 'warning');
+                return;
+            }
+
+            this.showToast('Starting CSRF tests...', 'info');
+
+            // Execute functions in sequence
+            this.sequence.forEach(async (step, index) => {
+                const func = this.functions.find(f => f.name === step.functionName);
+                if (func) {
+                    try {
+                        // Create global variables from form fields
+                        const globalVars = {};
+                        this.fields.forEach(field => {
+                            if (field.name.trim()) {
+                                // For now, use placeholder values - in real implementation,
+                                // these would come from the testing panel form inputs
+                                globalVars[field.name] = `test_${field.name}`;
+                            }
+                        });
+
+                        // Execute the function code with global variables available
+                        const funcCode = `
+                            (function() {
+                                ${Object.keys(globalVars).map(key => `var ${key} = ${JSON.stringify(globalVars[key])};`).join('\n')}
+                                ${func.code}
+                            })()
+                        `;
+
+                        // Execute the function (this would normally make API calls using APICaller)
+                        eval(funcCode);
+
+                    } catch (error) {
+                        console.error(`Error executing function ${func.name}:`, error);
+                        this.showToast(`Error in function ${func.name}: ${error.message}`, 'danger');
+                    }
+                }
+            });
         }
     }
-}).mount('#main-app');
+});
+
+// Store reference to Vue app for APICaller proxy
+window.vueApp = app;
+
+app.mount('#app');
 </script>
 {% endblock %}
