@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Home - CSRF Testing Tool{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>CSRF Testing Tool</h1>
+    <p>Welcome to the CSRF Testing Tool. Choose a panel to get started.</p>
+    <div class="panel-links">
+        <a href="{{ url_for('staging') }}" class="panel-link">Staging Panel</a>
+        <a href="{{ url_for('testing') }}" class="panel-link">Testing Panel</a>
+    </div>
+</div>
+{% endblock %}
