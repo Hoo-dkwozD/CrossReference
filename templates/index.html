@@ -1,14 +1,223 @@
 {% extends "base.html" %}
 
-{% block title %}Home - CSRF Testing Tool{% endblock %}
+{% block title %}CSRF Testing Tool{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>CSRF Testing Tool</h1>
-    <p>Welcome to the CSRF Testing Tool. Choose a panel to get started.</p>
-    <div class="panel-links">
-        <a href="{{ url_for('staging') }}" class="panel-link">Staging Panel</a>
-        <a href="{{ url_for('testing') }}" class="panel-link">Testing Panel</a>
+{% raw %}
+<section class="section">
+    <div id="main-app" class="container">
+        <div class="header-section">
+            <h1 class="title mb-0">
+                <span class="title-blue">C</span>
+                <span class="title-white">ros</span>
+                <span class="title-blue">sR</span>
+                <span class="title-white">e</span>
+                <span class="title-blue">f</span>
+                <span class="title-white">erence</span>
+            </h1>
+            <div class="tabs is-toggle">
+                <ul>
+                    <li :class="{ 'is-active': activeTab === 'staging' }">
+                        <a @click="activeTab = 'staging'">
+                            <span class="icon"><i class="material-icons">settings</i></span>
+                            <span>Staging Panel</span>
+                        </a>
+                    </li>
+                    <li :class="{ 'is-active': activeTab === 'testing' }">
+                        <a @click="activeTab = 'testing'">
+                            <span class="icon"><i class="material-icons">play_circle</i></span>
+                            <span>Testing Panel</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div v-if="activeTab === 'staging'">
+            <div class="panel-header">
+                <h2 class="subtitle">Staging Panel</h2>
+                <button @click="saveConfig" class="button is-primary neon-button">
+                    <span class="icon"><i class="material-icons">save</i></span>
+                    <span>Save Configuration</span>
+                </button>
+            </div>
+
+            <div class="box">
+                <div class="section-header">
+                    <h3 class="title is-5">Form Fields</h3>
+                    <button @click="addField" class="icon-button">
+                        <span class="icon"><i class="material-icons">add</i></span>
+                    </button>
+                </div>
+                <p class="section-description">Define the input fields that will be available in the testing panel. These fields will create global variables for use in your functions.</p>
+                <div v-for="(field, index) in fields" :key="index" class="field-row">
+                    <input v-model="field.name" class="input" placeholder="Field Name" />
+                    <div class="select">
+                        <select v-model="field.type">
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                            <option value="email">Email</option>
+                        </select>
+                    </div>
+                    <button @click="removeField(index)" class="button is-danger is-small">
+                        <span class="icon"><i class="material-icons">delete</i></span>
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="availableVariables.length > 0" class="box">
+                <h3 class="title is-5">Available Variables:</h3>
+                <p class="section-description">These variables are automatically created from your form fields and can be used in your function code below.</p>
+                <div class="variable-pills">
+                    <span v-for="(variable, index) in availableVariables" :key="variable" class="variable-pill" :style="{ backgroundColor: pillColors[index % pillColors.length] }">
+                        {{ variable }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="box">
+                <div class="section-header">
+                    <h3 class="title is-5">Functions</h3>
+                    <button @click="addFunction" class="icon-button">
+                        <span class="icon"><i class="material-icons">add</i></span>
+                    </button>
+                </div>
+                <p class="section-description">Write JavaScript functions that will make API calls. Use the available variables from your form fields in your function code.</p>
+                <div v-for="(func, index) in functions" :key="index" class="function-row">
+                    <input v-model="func.name" class="input" placeholder="Function Name" />
+                    <textarea v-model="func.code" class="textarea" placeholder="Function Code (use global variables from fields)"></textarea>
+                    <button @click="removeFunction(index)" class="button is-danger is-small">
+                        <span class="icon"><i class="material-icons">delete</i></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="box">
+                <div class="section-header">
+                    <h3 class="title is-5">Sequence</h3>
+                    <button @click="addStep" class="icon-button">
+                        <span class="icon"><i class="material-icons">add</i></span>
+                    </button>
+                </div>
+                <p class="section-description">Arrange the order in which your functions will be executed during the CSRF test.</p>
+                <div v-for="(step, index) in sequence" :key="index" class="sequence-row">
+                    <div class="select">
+                        <select v-model="step.functionName">
+                            <option v-for="func in functions" :value="func.name" :key="func.name">{{ func.name }}</option>
+                        </select>
+                    </div>
+                    <button @click="removeStep(index)" class="button is-danger is-small">
+                        <span class="icon"><i class="material-icons">delete</i></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="activeTab === 'testing'">
+            <div class="panel-header">
+                <h2 class="subtitle">Testing Panel</h2>
+                <button @click="runTests" class="button is-primary neon-button">
+                    <span class="icon"><i class="material-icons">play_arrow</i></span>
+                    <span>Run Tests</span>
+                </button>
+            </div>
+
+            <div class="box">
+                <h3 class="title is-5">Test Results</h3>
+                <div v-if="testResults.length === 0" class="content">
+                    <p>No tests run yet. Configure your staging panel and run tests.</p>
+                </div>
+                <div v-else>
+                    <div v-for="(result, index) in testResults" :key="index" class="box" :class="result.success ? 'has-background-success-light' : 'has-background-danger-light'">
+                        <h4 class="title is-6">{{ result.method }} {{ result.path }}</h4>
+                        <pre>{{ result.response }}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-</div>
+</section>
+{% endraw %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            activeTab: 'staging',
+            fields: [],
+            functions: [],
+            sequence: [],
+            testResults: [],
+            pillColors: [
+                '#007bff', // Blue
+                '#28a745', // Green
+                '#dc3545', // Red
+                '#ffc107', // Yellow
+                '#6f42c1', // Purple
+                '#e83e8c', // Pink
+                '#fd7e14', // Orange
+                '#20c997', // Teal
+                '#6c757d'  // Gray
+            ]
+        }
+    },
+    computed: {
+        availableVariables() {
+            return this.fields.filter(field => field.name.trim()).map(field => field.name.trim());
+        }
+    },
+    mounted() {
+        this.loadConfig();
+    },
+    methods: {
+        addField() {
+            this.fields.push({ name: '', type: 'text' });
+        },
+        removeField(index) {
+            this.fields.splice(index, 1);
+        },
+        addFunction() {
+            this.functions.push({ name: '', code: '' });
+        },
+        removeFunction(index) {
+            this.functions.splice(index, 1);
+        },
+        addStep() {
+            this.sequence.push({ functionName: '' });
+        },
+        removeStep(index) {
+            this.sequence.splice(index, 1);
+        },
+        saveConfig() {
+            const config = {
+                fields: this.fields,
+                functions: this.functions,
+                sequence: this.sequence
+            };
+            localStorage.setItem('csrfConfig', JSON.stringify(config));
+            alert('Configuration saved!');
+        },
+        loadConfig() {
+            const config = localStorage.getItem('csrfConfig');
+            if (config) {
+                const parsed = JSON.parse(config);
+                this.fields = parsed.fields || [];
+                this.functions = parsed.functions || [];
+                this.sequence = parsed.sequence || [];
+            }
+        },
+        runTests() {
+            // Placeholder for test execution
+            this.testResults = [
+                { method: 'POST', path: '/api/test', response: 'Test response 1', success: true },
+                { method: 'GET', path: '/api/data', response: 'Test response 2', success: false }
+            ];
+        }
+    }
+}).mount('#main-app');
+</script>
 {% endblock %}

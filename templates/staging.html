@@ -3,9 +3,104 @@
 {% block title %}Staging Panel - CSRF Testing Tool{% endblock %}
 
 {% block content %}
-<div class="container">
+{% raw %}
+<div id="staging-app" class="container">
     <h1>Staging Panel</h1>
     <p>Configure CSRF testing details here.</p>
-    <!-- Staging panel content will be added here -->
+
+    <div class="section">
+        <h2>Form Fields</h2>
+        <div v-for="(field, index) in fields" :key="index" class="field-item">
+            <input v-model="field.name" placeholder="Field Name" />
+            <select v-model="field.type">
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="email">Email</option>
+            </select>
+            <button @click="removeField(index)">Remove</button>
+        </div>
+        <button @click="addField">Add Field</button>
+    </div>
+
+    <div class="section">
+        <h2>Functions</h2>
+        <div v-for="(func, index) in functions" :key="index" class="function-item">
+            <input v-model="func.name" placeholder="Function Name" />
+            <textarea v-model="func.code" placeholder="Function Code (use global variables from fields)"></textarea>
+            <button @click="removeFunction(index)">Remove</button>
+        </div>
+        <button @click="addFunction">Add Function</button>
+    </div>
+
+    <div class="section">
+        <h2>Sequence</h2>
+        <div v-for="(step, index) in sequence" :key="index" class="sequence-item">
+            <select v-model="step.functionName">
+                <option v-for="func in functions" :value="func.name" :key="func.name">{{ func.name }}</option>
+            </select>
+            <button @click="removeStep(index)">Remove</button>
+        </div>
+        <button @click="addStep">Add Step</button>
+    </div>
+
+    <button @click="saveConfig">Save Configuration</button>
 </div>
+{% endraw %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            fields: [],
+            functions: [],
+            sequence: []
+        }
+    },
+    mounted() {
+        this.loadConfig();
+    },
+    methods: {
+        addField() {
+            this.fields.push({ name: '', type: 'text' });
+        },
+        removeField(index) {
+            this.fields.splice(index, 1);
+        },
+        addFunction() {
+            this.functions.push({ name: '', code: '' });
+        },
+        removeFunction(index) {
+            this.functions.splice(index, 1);
+        },
+        addStep() {
+            this.sequence.push({ functionName: '' });
+        },
+        removeStep(index) {
+            this.sequence.splice(index, 1);
+        },
+        saveConfig() {
+            const config = {
+                fields: this.fields,
+                functions: this.functions,
+                sequence: this.sequence
+            };
+            localStorage.setItem('csrfConfig', JSON.stringify(config));
+            alert('Configuration saved!');
+        },
+        loadConfig() {
+            const config = localStorage.getItem('csrfConfig');
+            if (config) {
+                const parsed = JSON.parse(config);
+                this.fields = parsed.fields || [];
+                this.functions = parsed.functions || [];
+                this.sequence = parsed.sequence || [];
+            }
+        }
+    }
+}).mount('#staging-app');
+</script>
 {% endblock %}
