@@ -1,5 +1,9 @@
 # CrossReference - CSRF Testing Tool
 
+<p align="center">
+    <img src="./static/img/logo.png" />
+</p>
+
 A web-based tool for testing Cross-Site Request Forgery (CSRF) vulnerabilities. This application allows users to configure API calls, simulate sequences of requests, and monitor real-time API call logs to identify potential CSRF issues.
 
 ## Features
