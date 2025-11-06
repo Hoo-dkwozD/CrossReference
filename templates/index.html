@@ -85,7 +85,7 @@
                         <span class="icon"><i class="material-icons">add</i></span>
                     </button>
                 </div>
-                <p class="section-description">Write JavaScript functions that will make API calls. Use the available variables from your form fields in your function code.</p>
+                <p class="section-description">Write JavaScript functions that will make API calls. Use the available variables from your form fields in your function code. For API calls, use `APICaller()` that functions like Axios.</p>
                 <div v-for="(func, index) in functions" :key="index" class="function-row columns">
                     <div class="column is-2">
                         <div class="field">
@@ -142,17 +142,45 @@
         <div v-if="activeTab === 'testing'">
             <div class="panel-header">
                 <h2 class="subtitle">Testing Panel</h2>
-                <button @click="runTests" class="button is-primary neon-button">
-                    <span class="icon"><i class="material-icons">play_arrow</i></span>
-                    <span>Run Tests</span>
-                </button>
+                <div class="buttons">
+                    <button @click="clearForm" class="button is-warning">
+                        <span class="icon"><i class="material-icons">clear</i></span>
+                        <span>Clear Form</span>
+                    </button>
+                    <button @click="runTests" class="button is-primary neon-button">
+                        <span class="icon"><i class="material-icons">play_arrow</i></span>
+                        <span>Run Tests</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="box">
+                <h3 class="title is-5">Test Form Inputs</h3>
+                <p class="section-description">Fill in the form fields defined in your staging panel. These values will be used as global variables in your functions.</p>
+                <div v-if="fields.length === 0" class="content">
+                    <p>No form fields configured. Please add fields in the staging panel first.</p>
+                </div>
+                <div v-else>
+                    <div v-for="(field, index) in fields" :key="index" class="field">
+                        <label class="label">{{ field.name || `Field ${index + 1}` }}</label>
+                        <div class="control">
+                            <input :type="field.type" v-model="testFormData[field.name]" class="input" :placeholder="`Enter ${field.name} value`" />
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="box">
                 <h3 class="title is-5">API Call Log</h3>
                 <p class="section-description">Real-time log of all API calls made during testing, showing requests and responses.</p>
+                <div class="buttons">
+                    <button @click="clearLogs" class="button is-warning is-small">
+                        <span class="icon"><i class="material-icons">delete_sweep</i></span>
+                        <span>Clear Logs</span>
+                    </button>
+                </div>
                 <div v-if="apiCalls.length === 0" class="content">
-                    <p>No API calls made yet. Configure your staging panel and run tests to see API call logs here.</p>
+                    <p>No API calls made yet. Fill in the form above and run tests to see API call logs here.</p>
                 </div>
                 <div v-else>
                     <div v-for="(call, index) in apiCalls" :key="index" class="box api-call-log" :class="call.type === 'request' ? 'has-background-info-light' : (call.success ? 'has-background-success-light' : 'has-background-danger-light')">
@@ -183,18 +211,39 @@
 
 {% block scripts %}
 <script>
-// APICaller proxy wrapper for axios with tracking
+// APICaller proxy wrapper for axios with tracking and CORS bypass
 window.APICaller = new Proxy(axios, {
     get(target, prop) {
         if (typeof target[prop] === 'function') {
             return function(...args) {
                 const method = prop.toUpperCase();
-                const config = args[0];
+                let config = args[0];
+
+                // If config is a string, convert to config object
+                if (typeof config === 'string') {
+                    config = { url: config };
+                }
+
+                // Add CORS bypass headers
+                config.headers = {
+                    ...config.headers,
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+                };
+
+                // For cross-origin requests, try to use a proxy or modify headers
+                if (config.url && !config.url.startsWith(window.location.origin)) {
+                    // Add no-cors mode for cross-origin requests
+                    config.mode = 'no-cors';
+                    // Alternative: Use a CORS proxy (uncomment if needed)
+                    // config.url = 'https://cors-anywhere.herokuapp.com/' + config.url;
+                }
 
                 // Track request
                 const requestInfo = {
                     method: method,
-                    url: config.url || (typeof config === 'string' ? config : ''),
+                    url: config.url || '',
                     headers: config.headers || {},
                     data: config.data || null,
                     timestamp: new Date().toISOString()
@@ -269,6 +318,7 @@ const app = createApp({
             sequence: [],
             testResults: [],
             apiCalls: [],
+            testFormData: {},
             toasts: [],
             pillColors: [
                 '#007bff', // Blue
@@ -414,12 +464,25 @@ const app = createApp({
                 this.functions[index].highlightedCode = highlighted.value;
             }
         },
+        clearForm() {
+            this.testFormData = {};
+            this.showToast('Form cleared', 'info');
+        },
+        clearLogs() {
+            this.apiCalls = [];
+            this.showToast('API call logs cleared', 'info');
+        },
         runTests() {
             // Clear previous results
             this.apiCalls = [];
 
             if (this.sequence.length === 0) {
                 this.showToast('No functions in sequence to execute', 'warning');
+                return;
+            }
+
+            if (this.fields.length > 0 && Object.keys(this.testFormData).length === 0) {
+                this.showToast('Please fill in the test form data first', 'warning');
                 return;
             }
 
@@ -430,13 +493,12 @@ const app = createApp({
                 const func = this.functions.find(f => f.name === step.functionName);
                 if (func) {
                     try {
-                        // Create global variables from form fields
+                        // Create global variables from form fields using test form data
                         const globalVars = {};
                         this.fields.forEach(field => {
                             if (field.name.trim()) {
-                                // For now, use placeholder values - in real implementation,
-                                // these would come from the testing panel form inputs
-                                globalVars[field.name] = `test_${field.name}`;
+                                // Use test form data if available, otherwise use placeholder
+                                globalVars[field.name] = this.testFormData[field.name] || `test_${field.name}`;
                             }
                         });
 
