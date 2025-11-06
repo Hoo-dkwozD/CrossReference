@@ -24,20 +24,19 @@ A web-based tool for testing Cross-Site Request Forgery (CSRF) vulnerabilities. 
 ## Installation
 
 1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/CrossReference.git
-   cd CrossReference
-   ```
+  ```bash
+  git clone https://github.com/Hoo-dkwozD/CrossReference.git && cd CrossReference
+  ```
 
 2. **Install dependencies**:
-   ```bash
-   pip install Flask
-   ```
+  ```bash
+  pip3 install Flask
+  ```
 
 3. **Run the application**:
-   ```bash
-   python app.py
-   ```
+  ```bash
+  python3 app.py
+  ```
 
 4. **Open your browser** and navigate to `http://localhost:5000`
 
