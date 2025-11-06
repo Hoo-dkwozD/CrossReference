@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}CSRF Testing Tool{% endblock %}
+{% block title %}CrossReference{% endblock %}
 
 {% block content %}
 {% raw %}
@@ -224,20 +224,10 @@ window.APICaller = new Proxy(axios, {
                     config = { url: config };
                 }
 
-                // Add CORS bypass headers
-                config.headers = {
-                    ...config.headers,
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-                };
-
                 // For cross-origin requests, try to use a proxy or modify headers
                 if (config.url && !config.url.startsWith(window.location.origin)) {
                     // Add no-cors mode for cross-origin requests
                     config.mode = 'no-cors';
-                    // Alternative: Use a CORS proxy (uncomment if needed)
-                    // config.url = 'https://cors-anywhere.herokuapp.com/' + config.url;
                 }
 
                 // Track request
