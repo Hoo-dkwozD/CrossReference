@@ -224,19 +224,14 @@ window.APICaller = new Proxy(axios, {
                     config = { url: config };
                 }
 
-                // For cross-origin requests, try to use a proxy or modify headers
-                if (config.url && !config.url.startsWith(window.location.origin)) {
-                    // Add no-cors mode for cross-origin requests
-                    config.mode = 'no-cors';
-                }
-
                 // Track request
                 const requestInfo = {
                     method: method,
                     url: config.url || '',
                     headers: config.headers || {},
                     data: config.data || null,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    withCredentials: config.withCredentials || true
                 };
 
                 // Add to Vue app's test results if available
